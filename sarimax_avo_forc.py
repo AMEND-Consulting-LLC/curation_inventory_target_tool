@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from holiday_assign import *
 
 def time_series_func(df, df_products, df_data, plot_save_flag, fig_path, pred_window,
-                     offseason_week_start, offseason_week_end, fcst_type, m):
+                     offseason_week_start, offseason_week_end, forc_year, fcst_type, m):
     # Initialize values
     unique_items = pd.unique(df["Item Number"])
     num_items = len(unique_items)
@@ -38,6 +38,9 @@ def time_series_func(df, df_products, df_data, plot_save_flag, fig_path, pred_wi
 
     off_start = pred_end + timedelta(weeks=1)
     off_end = off_start + timedelta(weeks=104)
+
+    if off_start.week > offseason_week_start and off_start.year == forc_year:
+        off_start = off_start - timedelta(weeks=off_start.week - offseason_week_start)
 
     warnings.filterwarnings("ignore")
     matplotlib.use("Agg")
@@ -127,13 +130,17 @@ def time_series_func(df, df_products, df_data, plot_save_flag, fig_path, pred_wi
             df_off_pred = pd.DataFrame(off_pred.predicted_mean)
             df_off_pred = df_off_pred.reset_index()
             df_off_pred["week"] = df_off_pred["index"].dt.isocalendar().week
+            df_off_pred["year"] = df_off_pred["index"].dt.year
+
+            df_off_pred = df_off_pred.loc[df_off_pred["year"] == forc_year].drop(columns="year")
+
             off_season_start_index = df_off_pred.loc[df_off_pred["week"] == offseason_week_start].index[0]
             off_season_end_index = df_off_pred.loc[df_off_pred["week"] == offseason_week_end].index[0]
             if off_season_start_index > off_season_end_index:
                 off_season_start_index = off_season_forecast.loc[off_season_forecast["week"]
                                                                  == offseason_week_end].index[1]
 
-            df_off_pred = df_off_pred.iloc[off_season_start_index
+            df_off_pred = df_off_pred.loc[off_season_start_index
                                            :off_season_end_index + 1].drop(columns="week")
             df_off_pred.rename(columns={'index': "date"}, inplace=True)
             df_off_pred["Item Name"] = item_name

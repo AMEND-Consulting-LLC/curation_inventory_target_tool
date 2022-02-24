@@ -20,7 +20,7 @@ from holiday_assign import *
 import xgboost as xgb
 
 def avo_gbr_func(df, df_products, df_data, fig_path, pred_window, plot_save_flag,
-                 offseason_week_start, offseason_week_end, fcst_type="gbr"):
+                 offseason_week_start, offseason_week_end, forc_year, fcst_type="gbr"):
     # Initialize values
     date_var = "Fiscal Week Start Date"
     us_holidays = holidays.UnitedStates()
@@ -38,6 +38,9 @@ def avo_gbr_func(df, df_products, df_data, fig_path, pred_window, plot_save_flag
 
     off_start = pred_end + timedelta(weeks=1)
     off_end = off_start + timedelta(weeks=104)
+
+    if off_start.week > offseason_week_start and off_start.year == forc_year:
+        off_start = off_start - timedelta(weeks=off_start.week - offseason_week_start)
 
     warnings.filterwarnings("ignore")
     matplotlib.use("Agg")
@@ -129,6 +132,9 @@ def avo_gbr_func(df, df_products, df_data, fig_path, pred_window, plot_save_flag
                                        end=off_end, freq='W-MON')
             off_season_forecast = pd.DataFrame(date_range, columns=[date_var])
             off_season_forecast["week"] = off_season_forecast[date_var].dt.isocalendar().week
+            off_season_forecast["year"] = off_season_forecast["Fiscal Week Start Date"].dt.year
+
+            off_season_forecast = off_season_forecast.loc[off_season_forecast["year"] == forc_year].drop(columns="year")
 
             off_season_start_index = off_season_forecast.loc[off_season_forecast["week"] == offseason_week_start].index[0]
             off_season_end_index = off_season_forecast.loc[off_season_forecast["week"] == offseason_week_end].index[0]
@@ -136,7 +142,7 @@ def avo_gbr_func(df, df_products, df_data, fig_path, pred_window, plot_save_flag
                 off_season_start_index = off_season_forecast.loc[off_season_forecast["week"]
                                                                  == offseason_week_end].index[1]
 
-            off_season_forecast = off_season_forecast.iloc[off_season_start_index
+            off_season_forecast = off_season_forecast.loc[off_season_start_index
                                                            :off_season_end_index + 1]
             fy_info = df_data[["FWeek", "FYear", "FPeriod", "WkDt"]].loc[df_data["WkDt"] >=
                                                                          off_season_forecast[date_var].min()].drop_duplicates()

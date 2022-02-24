@@ -37,7 +37,7 @@ plt.style.use('seaborn-whitegrid')
 matplotlib.use("Agg")
 
 start_time = timeit.default_timer()
-# Read in excel file
+# # Read in excel file
 base_path = "C:\\Users\\"
 filetypes = (('All files', '*.*'),
              ('Excel files', '*.xlsx'))
@@ -46,6 +46,11 @@ f = fd.askopenfile(initialdir=base_path, filetypes=filetypes)
 f.close()
 # Read in the parameters and assign them to their respective variables
 df_constants = pd.read_excel(f.name, engine="openpyxl")
+
+# f = __file__.rsplit("/", 2)[0] + "/inventory_target_constants.xlsx"
+# if ".py" in f:
+#     f = __file__.rsplit("\\", 2)[0] + "\\inventory_target_constants.xlsx"
+# df_constants = pd.read_excel(f, engine="openpyxl")
 
 # Read in parameters. Make sure that paths exist and notify user of missing parameter
 try:
@@ -74,6 +79,7 @@ try:
     pred_window = df_constants["var"].loc[df_constants["var_name"] == "pred_window"].iloc[0]
     offseason_week_start = df_constants["var"].loc[df_constants["var_name"] == "offseason_week_start"].iloc[0]
     offseason_week_end = df_constants["var"].loc[df_constants["var_name"] == "offseason_week_end"].iloc[0]
+    forc_year = df_constants["var"].loc[df_constants["var_name"] == "forc_year"].iloc[0]
 
     seasonality_factor = df_constants["var"].loc[df_constants["var_name"] == "seasonality_factor"].iloc[0]
 
@@ -91,8 +97,18 @@ if pred_window > 30 or pred_window < 13:
     param_check = ctypes.windll.user32.MessageBoxW(0, "Your testing window is abnormal. "
                                                       "Are you sure you'd like to continue?", "Parameter Check", 4)
     if param_check == 7:
-        easygui.multenterbox("Please enter your new testing window:", "Test Window Entry",
+        pred_window = easygui.multenterbox("Please enter your new testing window:", "Test Window Entry",
                              ["Test Window Length (weeks)"], [23])
+        pred_window = int(pred_window)
+
+# Check that the user is okay with an abnormal offseason week
+if forc_year == pd.Timestamp(date.today()).year and pd.Timestamp(date.today()).week >= offseason_week_start:
+    param_check = ctypes.windll.user32.MessageBoxW(0, "Your offseason start week is before the current date. "
+                                                      "Are you sure you'd like to continue?", "Parameter Check", 4)
+    if param_check == 7:
+        offseason_week_start = easygui.multenterbox("Please enter your new offseason start week:", "Test Window Entry",
+                             ["Offseason Start Week"], [9])
+        offseason_week_start = int(offseason_week_start[0])
 
 # Make sure the offseason weeks are physically possible
 if offseason_week_start > offseason_week_end or offseason_week_start < 1 or offseason_week_end > 53:
@@ -103,8 +119,8 @@ if offseason_week_start > offseason_week_end or offseason_week_start < 1 or offs
                                                                     "Offseason Window Entry",
                                                                     ["Offseason Window Start (week)",
                                                                      "Offseason Window End (week)"], [7, 36])
-    offseason_week_start = int(offseason_week_start)
-    offseason_week_end = int(offseason_week_end)
+    offseason_week_start = int(offseason_week_start[0])
+    offseason_week_end = int(offseason_week_end[0])
 
 # Update the sales history excel workbook
 if curation_env_flag:
@@ -148,16 +164,17 @@ df["week"] = df[date_var].dt.isocalendar().week
 # Run the forecasting functions
 if gbr_flag:
     gbr_rmse, gbr_predictions, gbr_off_season = avo_gbr_func(df, df_products, df_data, fig_path, pred_window, plot_save_flag,
-                                                             offseason_week_start, offseason_week_end, fcst_type="gbr")
+                                                             offseason_week_start, offseason_week_end,
+                                                             forc_year, fcst_type="gbr")
 
 ts_rmse, ts_predictions, ts_off_season = time_series_func(df, df_products, df_data, plot_save_flag, fig_path,
-                                                          pred_window, offseason_week_start, offseason_week_end,
-                                                          fcst_type = "sarimax", m = seasonality_factor)
+                                                          pred_window, offseason_week_start, offseason_week_end, 
+                                                          forc_year, fcst_type = "sarimax", m = seasonality_factor)
 
 naive_rmse, naive_predictions, naive_off_season = base_avo_model_v2_func(df, df_products, df_data, df_market,
                                                                          plot_save_flag, fig_path, pred_window,
                                                                          offseason_week_start, offseason_week_end,
-                                                                         fcst_type = "naive")
+                                                                         forc_year, fcst_type = "naive")
 
 plt.close('all')
 
@@ -246,7 +263,7 @@ for ii in range(combined_rmse.shape[0]):
     # Plot actuals vs forecast
     fig_name = fig_path + full_label + "\\" + "actual_vs_" + full_label + "_forc_data" + item_name + "_" + curr_date + ".png"
     fig = plt.figure()
-    fig.set_size_inches(12, 6.8)
+
     plt.plot(df_actuals["Fiscal Week Start Date"], df_actuals["CasesSum"], "-o", label="Sales")
     plt.plot(df_best_forc["Fiscal Week Start Date"], df_best_forc["predicted"], "-o", label="Forecast")
 
@@ -391,6 +408,9 @@ for ii in range(combined_rmse.shape[0]):
         df_sub = df.loc[(df["Item Number"] == item_name)]
         min_df_year = df_sub["Fiscal Week Start Date"].dt.year.min()
         max_df_year = df_sub["Fiscal Week Start Date"].dt.year.max()
+
+        if pd.Timestamp(date.today()).week < offseason_week_start and pd.Timestamp(date.today()).year == max_df_year:
+            max_df_year -= 1
 
         year_week_df = pd.DataFrame()
         fig = plt.figure()
